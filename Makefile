@@ -1,4 +1,4 @@
-CC=gcc
+CC=gcc 
 CFLAGS=-ansi -pedantic -W -Wall -Wundef -Wstrict-prototypes -O2
 PROGRAM=rerun
 all: 

@@ -3,19 +3,26 @@
 .SH NAME
 rerun \- Watches for changes to your source files and then executes a command.
 .SH DESCRIPTION
-Usage rerun DIRECTORY \fB\-f\fR FILE_PATTERN  do COMMAND...
-.IP
-rerun FILES ... do COMMAND
+Usage rerun DIRECTORY FILE_PATTERN COMMAND...
 .PP
 Watches DIRECTORY for changes in any file that matches FILE_PATTERN
-and then runs COMMAND.
+and then runs COMMAND. FILE_PATTERN should be in the glob format.
 .PP
-Default directory is the current directory.
+You probably want to wrap both the FILE_PATTERN and COMMAND in quotes,
+so the shell doesn't pre\-expand patterns and the command is seen as a
+single argument.
+.SH EXAMPLES
+.IP
+rerun web/js "*.js" "juicer merge \fB\-min\fR '' web/js/behavior.js
+.IP
+rerun web "*.css" "bin/package_site.sh
+.PP
+Bugs:
+rerun doesn't watch directories recursively
+.PP
+Mozilla Tri\-License: MPL 1.1/GPL 2.0/LGPL 2.1
 .SH AUTHOR
-Written by ozten <shout@ozten.com>.
-.SH COPYRIGHT
-Copyright \(co 2010 Austin King
-License
+Written by Austin King <shout@ozten.com>.
 .SH "SEE ALSO"
 The full documentation for
 .B rerun

@@ -3,7 +3,11 @@ A linux command line program for watching a directory and rerunning a command
 when it's contents change.
 
 ## BUILD
+Requires gcc
+
     make
+
+You can copy 'rerun' into a local ~/bin or some other location that is on your PATH.
 
 ## USAGE
     rerun DIRECTORY FILE_PATTERN COMMAND...
@@ -20,8 +24,13 @@ Depends on inotify which is a Linux Kernel 2.6.13 and later feature.
     rerun web "*.css" bin/package_site.sh
 
 ## BUGS 
-rerun doesn't watch directories recursively.
-rerun doesn't handle lots of file modifications in a short amount of time well. It will call your command multiple times.
+ * rerun doesn't watch directories recursively.
+ * rerun doesn't handle lots of file modifications in a short amount of time well. It will call your command multiple times.
+ * Usage isn't written in stone and can be improved
+
+
+## LICENSE
+This code is licensed under the Mozilla Tri-License MPL 1.1/GPL 2.0/LGPL 2.1
 
 <pre>
 ================================77777$$$$$$Z$$$OZZZOOOOOOOOOOOOOOZZ7++++++++++++

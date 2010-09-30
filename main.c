@@ -53,6 +53,7 @@ int main(int argc, char *argv[])
   int i;
   char *program = argv[0];
   char *directory, *fileglob, *command;
+  struct inotify_state *state;
 
   directory = "unknown";
   command = "";
@@ -80,13 +81,13 @@ int main(int argc, char *argv[])
       fileglob = argv[i];
     } else if (i == 3) {
       command = argv[i];
-    }
+    } 
   }
-  init_inotify(directory);
+  state = init_inotify(directory);
   while(1) {
-    rerun(fileglob, command);
+    rerun(state, fileglob, command);
   }/*while(1)*/
-  cleanup_inotify();
+  cleanup_inotify(state);
   return EX_OK; /* Should never get here */
 }
 

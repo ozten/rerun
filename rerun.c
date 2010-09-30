@@ -50,28 +50,29 @@
 #define EVENT_SIZE  ( sizeof (struct inotify_event) )
 #define BUF_LEN     ( 1024 * ( EVENT_SIZE + 16 ) )
 
-static int fd, wd;
-
-void init_inotify(char *directory)
+void * init_inotify(char *directory)
 {
-  fd = inotify_init();
-  if (-1 == fd) {
+  struct inotify_state *state;
+  state = (struct inotify_state *) malloc(sizeof(struct inotify_state));
+  state->fd = inotify_init();
+  if (-1 == state->fd) {
     perror("Unable to setup the system."); 
   }
-  wd = inotify_add_watch(fd, directory, IN_MODIFY | IN_CREATE | IN_DELETE);
+  state->wd = inotify_add_watch(state->fd, directory, IN_MODIFY | IN_CREATE | IN_DELETE);
   /* TODO recursively walk tree adding
      any directories we see 
      TODO When a directory is deleted, rm it's watches
      TODO When a directory is added, add it's watches
    */
-  if (-1 == wd) {  
-    char msg[140] = "";
+  if (-1 == state->wd) {  
+    char msg[140] = ""; 
     sprintf(msg, "Unable to watch directory %s the system.", directory);
-    perror(msg);
+    perror(msg); 
   }
+  return state;
 }
 
-void rerun(char *fileglob, char *command)
+void rerun(struct inotify_state *state, char *fileglob, char *command)
 {
   char buffer[BUF_LEN];
   int length = 0;
@@ -79,11 +80,12 @@ void rerun(char *fileglob, char *command)
   int ret = 0;
 
     printf("Sleeping\n");
-    length = read( fd, buffer, BUF_LEN );
+    length = read( state->fd, buffer, BUF_LEN );
     printf("Waking up\n"); 
     printf("Read %d %d back\n", length, errno); 
     if (length < 0) {
       perror("Unknown Error while watching for changes.");
+      exit(EX_UNAVAILABLE);
     } else {
       inotify_index = 0;
       while(inotify_index < length) {
@@ -97,10 +99,10 @@ void rerun(char *fileglob, char *command)
 
             if (WIFSIGNALED(ret) &&
                 (WTERMSIG(ret) == SIGINT || WTERMSIG(ret) == SIGQUIT)) {
-              cleanup_inotify();
+              cleanup_inotify(state);
             } 
           } else {
-            /* printf("Skipping %s didn't match %s\n", event->name, fileglob); */
+            printf("Skipping %s didn't match %s\n", event->name, fileglob);
           }          
           inotify_index += EVENT_SIZE + event->len;
         }
@@ -108,14 +110,16 @@ void rerun(char *fileglob, char *command)
     } 
 }
 
-void cleanup_inotify(void)
+void cleanup_inotify(struct inotify_state *state)
 {
-  if (inotify_rm_watch(fd, wd) < 0) {
+  if (inotify_rm_watch(state->fd, state->wd) < 0) {
     printf("Error trying to stop watching Error:%s\n", strerror(errno));
   }
-  if (close(fd) < 0) {
+  if (close(state->fd) < 0) {
     printf("Error closing inotify Error:%s\n", strerror(errno));
   }
+  free(state);
+  state = NULL;
   exit(EX_OK);
 }
 

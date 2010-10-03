@@ -1,8 +1,17 @@
 CC=gcc 
-CFLAGS=-ansi -pedantic -W -Wall -Wundef -Wstrict-prototypes -O2
+CFLAGS=-g -ansi -pedantic -W -Wall -Wundef -Wstrict-prototypes -O2
 PROGRAM=rerun
-all: 
-	${CC} ${CFLAGS} -o ${PROGRAM} rerun.c main.c
+all: rerun
+
+rerun: rerun.o main.o
+	${CC} ${CFLAGS} -o ${PROGRAM} rerun.o main.o
+
+main.o: main.c rerun.h
+
+rerun.o: rerun.c rerun.h
+
+debug:
+	${CC} ${DFLAGS} -o ${PROGRAM} rerun.c main.c
 
 clean:
 	rm -f ${PROGRAM} *~

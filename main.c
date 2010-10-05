@@ -36,17 +36,31 @@
  * ***** END LICENSE BLOCK ***** */
 
 #include <stdio.h>
-
+#include <stdlib.h> /* exit */
 #include <errno.h>
 
 
 #include <string.h> /* strcmp */
 #include <sysexits.h> /* EX_USAGE, EX_OK */
 
+#include <signal.h> /* sigaction */
+#include <bits/sigaction.h> /* WTF? sigaction TODO gcc -std=gnu99 instead of ansi? */
+
 #include "rerun.h"
 
 static void usage(char[]);
 static void version(char *program);
+
+void handler(int sig)
+{
+  if (sig == SIGINT) {
+    printf("Got %d SIGINT quiting\n", sig);
+  } else {
+    printf("Got %d ? quiting\n", sig);
+  }
+  cleanup();
+  exit(EX_OK);
+}
 
 int main(int argc, char *argv[])
 {
@@ -54,6 +68,7 @@ int main(int argc, char *argv[])
   char *program = argv[0];
   char *directory, *fileglob, *command;
   struct inotify_state *state;
+  struct sigaction sa;
 
   directory = "unknown";
   command = "";
@@ -81,15 +96,28 @@ int main(int argc, char *argv[])
       fileglob = argv[i];
     } else if (i == 3) {
       command = argv[i];
-    } 
+    }
   }
   state = init_inotify(directory);
+
+  sa.sa_handler = handler;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+
+  if (sigaction(SIGHUP, &sa, NULL) == -1) {
+    perror("Unable to setup sigaction");    
+  }
+  if (sigaction(SIGINT, &sa, NULL) == -1) {
+    perror("Unable to setup sigaction");    
+  }
   while(1) {
     rerun(state, fileglob, command);
-  }/*while(1)*/
+  }
   cleanup_inotify(state);
   return EX_OK; /* Should never get here */
 }
+
+
 
 void usage(char program[])
 {

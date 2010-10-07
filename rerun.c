@@ -113,46 +113,42 @@ void grow_watched_dirs(struct inotify_state *state)
 {
   int  *t_wds;
   char **t_fpaths;
-  int i;
+  int i, n;
   int grow_size = 5;
 
   /* 0 through watched_len (inclusive) are have valid data, the rest 
      are unallocated memory */
-
-  printf("DEBUG: ENTER grow_watched_dirs watched_len=[%d]\n", state->watched_len);
-  t_wds    = (int *)  malloc(sizeof(int) *  (state->max_watched_len + grow_size));
-  /* TODO: aok t_fpaths could be the same size as old state */
-  t_fpaths = (char **) malloc(sizeof(char *) * (state->max_watched_len + grow_size));
+  n = state->max_watched_len;
+  t_wds    = (int *)  malloc(sizeof(int) * n);
+  t_fpaths = (char **) malloc(sizeof(char *) * n);
   if (t_wds != NULL && t_fpaths != NULL) {
+    memcpy(t_wds, state->watched_dirs, sizeof(char *) * n);/*(state->max_watched_len + grow_size));*/
     for (i=0; i <= state->watched_len; i++) {
-        /* TODO try using memcpy(t_wds, state->watched_dirs); instead */
-        t_wds[i]    = state->watched_dirs[i];
-
-        t_fpaths[i] =
-          (char *) malloc(sizeof(char) * (strlen(state->watched_fpaths[i]) + 1));
-          strcpy(t_fpaths[i], state->watched_fpaths[i]);      
-
-          free(state->watched_fpaths[i]);
-          state->watched_fpaths[i] = NULL;
+      *t_fpaths = (char *) malloc(sizeof(char) * (strlen(*state->watched_fpaths) + 1));
+      strcpy(*t_fpaths++, *state->watched_fpaths);
+      free(*state->watched_fpaths);
+      *state->watched_fpaths++ = NULL;
     }
+    t_fpaths -= i;
+    state->watched_fpaths -= i;
 
     free(state->watched_dirs);
     state->watched_dirs = NULL;
     free(state->watched_fpaths);
     state->watched_fpaths = NULL;
 
-    state->watched_dirs = (int *) malloc(sizeof(int) * 
-                                         (state->max_watched_len + grow_size));
-    state->watched_fpaths = (char **) malloc(sizeof(char *) * (state->max_watched_len + grow_size));
-
+    state->watched_dirs = (int *) malloc(sizeof(int) * (n + grow_size));
+    state->watched_fpaths = (char **) malloc(sizeof(char *) * (n + grow_size));
+    memcpy(state->watched_dirs, t_wds, sizeof(char *) * (n + grow_size));
     for (i=0; i <= state->watched_len; i++) {
-        state->watched_dirs[i] = t_wds[i]; 
-        state->watched_fpaths[i] =
-            (char *) malloc(sizeof(char) * (strlen(t_fpaths[i]) + 1));
-          strcpy(state->watched_fpaths[i], t_fpaths[i]);
-          free(t_fpaths[i]);
-          t_fpaths[i] = NULL;
+      *state->watched_fpaths = (char *) malloc(sizeof(char) * (strlen(*t_fpaths) + 1));
+      strcpy(*state->watched_fpaths++, *t_fpaths);
+      free(*t_fpaths);
+      *t_fpaths++ = NULL;
     }
+    t_fpaths -= i;
+    state->watched_fpaths -= i;
+
     free(t_wds);
     t_wds = NULL;
     free(t_fpaths);
@@ -162,8 +158,8 @@ void grow_watched_dirs(struct inotify_state *state)
   } else {
     perror("Unable to allocate memory to grow watched directories\n");
   }
-  printf("DEBUG: EXIT grow_watched_dirs\n");
 }
+
 
 void * init_inotify(char *directory)
 {

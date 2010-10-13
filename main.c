@@ -34,6 +34,11 @@
  * the terms of any one of the MPL, the GPL or the LGPL.
  *
  * ***** END LICENSE BLOCK ***** */
+/*
+#define _POSIX_C_SOURCE 2
+#define _XOPEN_SOURCE
+#define _POSIX_SOURCE
+*/
 
 #include <stdio.h>
 #include <stdlib.h> /* exit */
@@ -41,14 +46,15 @@
 
 
 #include <string.h> /* strcmp */
-#include <sysexits.h> /* EX_USAGE, EX_OK */
+#include <sysexits.h> /* EX_USAGE, EX_OK */ 
 
+#include <unistd.h>
 #include <signal.h> /* sigaction */
 #include <bits/sigaction.h> /* WTF? sigaction TODO gcc -std=gnu99 instead of ansi? */
 
 #include "rerun.h"
 
-static void usage(char[]);
+static void usage(char[]); 
 static void version(char *program);
 
 void handler(int sig)
@@ -117,15 +123,13 @@ int main(int argc, char *argv[])
   return EX_OK; /* Should never get here */
 }
 
-
-
 void usage(char program[])
 {
 /*2345678901234567890123456789012345678901234567890123456789012345678901234567*/
   printf(
 "Usage %s DIRECTORY FILE_PATTERN COMMAND...\n"
 "\n"
-"Watches DIRECTORY for changes in any file that matches FILE_PATTERN\n"
+"Watches DIRECTORY recursively for changes in any file that matches FILE_PATTERN\n"
 "and then runs COMMAND. FILE_PATTERN should be in the glob format.\n"
 "\n"
 "You probably want to wrap both the FILE_PATTERN and COMMAND in quotes,\n"
@@ -137,15 +141,19 @@ void usage(char program[])
 "\n"
 "\t%s web \"*.css\" \"bin/package_site.sh\n"
 "\n"
+"rerun will ignore dotfiles such as .#foo.js. It will watch new sub-\n"
+"directories which are added later.\n"
+"\n"
 "Bugs:\n"
-"rerun doesn't watch directories recursively\n"
+"When a directory is deleted, it's watches are not removed.\n"
+"Adding and deleting a lot of sub-directories rapidly may confuse rerun.\n"
 "\n", program, program, program); 
 }
 
 void version(char *program)
 {
   printf(
-"%s 0.1\n"
+"%s 0.2\n"
 "\n"
 "Mozilla Tri-License: MPL 1.1/GPL 2.0/LGPL 2.1\n"
 "\n"

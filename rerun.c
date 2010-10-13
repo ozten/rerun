@@ -58,60 +58,54 @@ struct inotify_state *rerun_state; /* only used by ftw, cleanup */
 void grow_watched_dirs(struct inotify_state *state);
 static void cleanup_inotify(struct inotify_state *state);
 static void watch_directory(struct inotify_state *state, char *directory);
+void handle_modified_file(struct inotify_state *state, struct inotify_event *event, char *command);
+void handle_create_directory(struct inotify_state *state, struct inotify_event *event);
+void handle_delete_directory(struct inotify_state *state, struct inotify_event *event);
 
 static int visit_directory(const char *fpath, const struct stat *sb,
-             int tflag, struct FTW *ftwbuf)
+                           int tflag, struct FTW *ftwbuf)
 {
   char *path;
-  printf("enter visit_directory\n");
   if (tflag == FTW_D) {
     path = realpath(fpath, NULL); 
     if (path != NULL) {
-      printf("Watching %s\n", path);
       watch_directory(rerun_state, path);
       free(path);
       path = NULL;
     }
   }
-  printf("exit visit_directory\n");
-
   return 0;
 }
 
 void watch_directory(struct inotify_state *state, char *directory)
 {
-  printf("enter watch_directory\n");
   if ((state->watched_len + 1) == state->max_watched_len) {
     grow_watched_dirs(state);
   }
-  printf("watch_dir %d\n", state->watched_len);
   state->watched_len++;
-  printf("watch_dir %d\n", state->watched_len);
 
   state->watched_dirs[state->watched_len] = 
     inotify_add_watch(state->fd, directory, IN_MODIFY | IN_CREATE | IN_DELETE);
-
   if (-1 == state->watched_dirs[state->watched_len]) {
     char *msg = (char *) malloc(sizeof(char *) * \
                                 (strlen("Unable to watch directory %s the system.") +
                                  strlen(directory)));
-                                                 ; /* TODO use strlen here */
     sprintf(msg, "Unable to watch directory %s the system.", directory);
     perror(msg); 
     free(msg);
     msg = NULL;
   } else {
-
+    state->in_use[state->watched_len] = 1;
     state->watched_fpaths[state->watched_len] = 
       (char *) malloc(sizeof(char) * (strlen(directory) + 1));
     strcpy(state->watched_fpaths[state->watched_len], directory);
   } 
-  printf("exit watch_directory\n"); 
 }
 
 void grow_watched_dirs(struct inotify_state *state)
 {
   int  *t_wds;
+  int  *t_in_use;
   char **t_fpaths;
   int i, n;
   int grow_size = 5;
@@ -119,10 +113,12 @@ void grow_watched_dirs(struct inotify_state *state)
   /* 0 through watched_len (inclusive) are have valid data, the rest 
      are unallocated memory */
   n = state->max_watched_len;
-  t_wds    = (int *)  malloc(sizeof(int) * n);
+  t_wds    = (int *)   malloc(sizeof(int) * n);
+  t_in_use = (int *)   malloc(sizeof(int) * n);
   t_fpaths = (char **) malloc(sizeof(char *) * n);
-  if (t_wds != NULL && t_fpaths != NULL) {
-    memcpy(t_wds, state->watched_dirs, sizeof(char *) * n);/*(state->max_watched_len + grow_size));*/
+  if (t_wds != NULL && t_in_use != NULL && t_fpaths != NULL) {
+    memcpy(t_wds, state->watched_dirs, sizeof(int *) * n);
+    memcpy(t_in_use, state->in_use, sizeof(int *) * n);
     for (i=0; i <= state->watched_len; i++) {
       *t_fpaths = (char *) malloc(sizeof(char) * (strlen(*state->watched_fpaths) + 1));
       strcpy(*t_fpaths++, *state->watched_fpaths);
@@ -133,13 +129,17 @@ void grow_watched_dirs(struct inotify_state *state)
     state->watched_fpaths -= i;
 
     free(state->watched_dirs);
+    free(state->in_use);
     state->watched_dirs = NULL;
+    state->in_use = NULL;
     free(state->watched_fpaths);
     state->watched_fpaths = NULL;
 
     state->watched_dirs = (int *) malloc(sizeof(int) * (n + grow_size));
+    state->in_use = (int *) malloc(sizeof(int) * (n + grow_size));
     state->watched_fpaths = (char **) malloc(sizeof(char *) * (n + grow_size));
-    memcpy(state->watched_dirs, t_wds, sizeof(char *) * (n + grow_size));
+    memcpy(state->watched_dirs, t_wds, sizeof(int *) * (n + grow_size));
+    memcpy(state->in_use, t_in_use, sizeof(int *) * (n + grow_size));
     for (i=0; i <= state->watched_len; i++) {
       *state->watched_fpaths = (char *) malloc(sizeof(char) * (strlen(*t_fpaths) + 1));
       strcpy(*state->watched_fpaths++, *t_fpaths);
@@ -150,7 +150,9 @@ void grow_watched_dirs(struct inotify_state *state)
     state->watched_fpaths -= i;
 
     free(t_wds);
+    free(t_in_use);
     t_wds = NULL;
+    t_in_use = NULL;
     free(t_fpaths);
     t_fpaths = NULL;
 
@@ -166,71 +168,168 @@ void * init_inotify(char *directory)
 
   struct inotify_state *state;
 
-  printf("enter init_inotify\n");
   rerun_state = state = (struct inotify_state *) malloc(sizeof(struct inotify_state));
   state->watched_len = -1;/* when used, increment then use */
   state->max_watched_len = 5;
   state->watched_dirs   = (int *) malloc(sizeof(int) * state->max_watched_len);
+  state->in_use   = (int *) malloc(sizeof(int) * state->max_watched_len);
   state->watched_fpaths = (char **) malloc(sizeof(char *) * state->max_watched_len);
 
   state->fd = inotify_init();
   if (-1 == state->fd) {
     perror("Unable to setup the system."); 
   }
-  
-  printf("after watch_dir %d\n", state->watched_len);
-  
+
   if (nftw(directory, visit_directory, 20, 0) == -1) {
     perror("nftw");
     exit(EXIT_FAILURE);
-    }
-  printf("finished ftw\n");
-  /* TODO recursively walk tree adding
-     any directories we see 
-     TODO When a directory is deleted, rm it's watches
-     TODO When a directory is added, add it's watches
-   */
-  printf("exit init_inotify\n");
+  }
   return state;
 }
 
 void rerun(struct inotify_state *state, char *fileglob, char *command)
 {
-
   char buffer[BUF_LEN];
   int length = 0;
   int inotify_index = 0;
-  int ret = 0;
-  printf("enter rerun\n");
-    printf("Sleeping\n");
-    length = read( state->fd, buffer, BUF_LEN );
-    printf("Waking up\n"); 
-    printf("Read %d %d back\n", length, errno); 
-    if (length < 0) {
-      perror("Unknown Error while watching for changes.");
-      exit(EX_UNAVAILABLE);
-    } else {
-      inotify_index = 0;
-      while(inotify_index < length) {
-        struct inotify_event *event = ( struct inotify_event * ) &buffer[ inotify_index ];
-        if (event->len) {
-          if (0 == fnmatch(fileglob, event->name, 0)) {
-            printf("File was modified %s executing command %s\n", 
-                   event->name, command);
-
-            ret = system(command);
-
-            if (WIFSIGNALED(ret) &&
-                (WTERMSIG(ret) == SIGINT || WTERMSIG(ret) == SIGQUIT)) {
-              cleanup_inotify(state);
-            } 
-          } else {
-            printf("Skipping %s didn't match %s\n", event->name, fileglob);
-          }          
-          inotify_index += EVENT_SIZE + event->len;
+  
+  length = read( state->fd, buffer, BUF_LEN );
+  if (length < 0) {
+    perror("Unknown Error while watching for changes.");
+    exit(EX_UNAVAILABLE);
+  } else {
+    inotify_index = 0;
+    while(inotify_index < length) {
+      struct inotify_event *event = ( struct inotify_event * ) &buffer[ inotify_index ];
+      if (event->len) {
+/*
+        if (IN_ACCESS & event->mask) {
+          printf("event %d, %s is IN_ACCES\n", event->wd, event->name);
+        } 
+        if (IN_ATTRIB & event->mask) {
+          printf("event %d, %s is IN_ATTRIB\n", event->wd, event->name);
+        }  
+        if ( IN_CLOSE_WRITE & event->mask) {
+          printf("event %d, %s is IN_CLOSE_WRITE\n", event->wd, event->name);
+        } 
+        if ( IN_CLOSE_NOWRITE & event->mask) {
+          printf("event %d, %s is IN_CLOSE_NOWRITE\n", event->wd, event->name);
+        } 
+        if ( IN_CREATE & event->mask) {
+          printf("event %d, %s is IN_CREATE\n", event->wd, event->name);
+        } 
+        if ( IN_DELETE & event->mask) {
+          printf("event %d, %s is IN_DELETE\n", event->wd, event->name);
+        } 
+        if ( IN_DELETE_SELF & event->mask) {
+          printf("event %d, %s is IN_DELETE_SELF\n", event->wd, event->name);
+        } 
+        if ( IN_MODIFY & event->mask) {
+          printf("event %d, %s is IN_MODIFY\n", event->wd, event->name);
+        } 
+        if ( IN_MOVE_SELF & event->mask) {
+          printf("event %d, %s is IN_MOVE_SELF\n", event->wd, event->name);
+        } 
+        if ( IN_MOVED_FROM & event->mask) {
+          printf("event %d, %s is IN_MOVED_FROM\n", event->wd, event->name);
+        } 
+        if ( IN_MOVED_TO & event->mask) {
+          printf("event %d, %s is IN_MOVED_TO\n", event->wd, event->name);
+        } 
+        if ( IN_OPEN & event->mask) {
+          printf("event %d, %s is IN_OPEN\n", event->wd, event->name);
         }
+        if ( IN_IGNORED & event->mask) {
+          printf("event %d, %s is IN_IGNORED\n", event->wd, event->name);
+        }
+        if ( IN_Q_OVERFLOW & event->mask) {
+          printf("event %d, %s is IN_Q_OVERFLOW\n", event->wd, event->name);
+        }
+*/
+        if ((IN_CREATE & event->mask) &&
+            (IN_ISDIR  & event->mask)) {
+          handle_create_directory(state, event);
+        }
+        
+        if ((IN_MODIFY & event->mask) &&
+            (strlen(event->name) > 0 && /* We should ignore .#foo.c */
+             event->name[0] != '.') &&  /* and other hidden files  */
+            0 == fnmatch(fileglob, event->name, 0)) {
+
+          handle_modified_file(state, event, command);
+
+        } 
+        if ((IN_DELETE_SELF & event->mask) &&
+            (IN_ISDIR  & event->mask)) {
+          /* TODO: if I delete a bunch of directories, I old get notified
+             of the last one. Is that lost data in the queue,
+             a timing issue between ftw and disk, or ??? 
+             mkdir -p a/b/c/d/e/f/g (see create b, create c)
+             rm -Rf a/b (see delete c, delete b)            
+
+             Adding sleep(1) in handle_create_directory block
+             let's use ftw a/b/c/d/e/f/g
+             but rm sees only delete g
+
+             Adding sync() in same area has same effect as sleep.
+          */
+          handle_delete_directory(state, event);
+        }
+        inotify_index += EVENT_SIZE + event->len;
       }
-    } 
+    }
+  }
+}
+
+/**
+ * Called when an *interesting* file has been modified
+ */
+void handle_modified_file(struct inotify_state *state, struct inotify_event *event, char *command)
+{
+  int ret = 0;
+  printf("DEBUG: File was modified %s executing command %s\n", 
+         event->name, command);
+
+  ret = system(command);
+
+  if (WIFSIGNALED(ret) &&
+      (WTERMSIG(ret) == SIGINT || WTERMSIG(ret) == SIGQUIT)) {
+    cleanup_inotify(state);
+  } 
+}
+
+void handle_create_directory(struct inotify_state *state, struct inotify_event *event)
+{
+  int i, found;
+  char *filename;
+
+  found = 0;
+
+  printf("DEBUG: Dir being created. wd = [%d], name = [%s]\n", event->wd, event->name);
+  for (i=0; i<state->watched_len; i++) {
+    if (event->wd == state->watched_dirs[i]) {
+      filename = (char *) malloc(sizeof(char *) * (strlen(state->watched_fpaths[i]) +
+                                                   strlen(event->name) + 2)); /* / and \0 */
+      strcpy(filename, state->watched_fpaths[i]);
+      strcat(filename, "/");
+      strcat(filename, event->name);
+      if (nftw(filename, visit_directory, 20, 0) == -1) {
+        perror("nftw");
+        exit(EXIT_FAILURE);
+      }
+      free(filename);
+      found = 1;
+      break;
+    }
+  }
+  if (1 != found) {
+    printf("Error: New Directory %s to be under a watched dir\n", event->name);
+  }
+}
+
+void handle_delete_directory(struct inotify_state *state, struct inotify_event *event)
+{
+  
 }
 
 void cleanup(void)
@@ -240,27 +339,28 @@ void cleanup(void)
 
 void cleanup_inotify(struct inotify_state *state)
 {
-
   int i;
-  printf("enter cleanup_inotify [%d]\n", state->watched_len);
   for (i=0; i <= state->watched_len; i++) {
-    printf("DEBUG: Removing watch [%s]\n", state->watched_fpaths[i]);
-    if (inotify_rm_watch(state->fd, state->watched_dirs[i]) < 0) {
-      printf("ERROR: trying to stop watching Error:%s\n", strerror(errno));
+    printf("DEBUG: Removing watch %d, [%s]\n", state->in_use[i], state->watched_fpaths[i]);
+    if (1 != state->in_use[i]) {
+      printf("DEBUG: Skipping unwatched directory\n");
     } else {
-      printf("DEBUG: Removed watch\n");
+      if (inotify_rm_watch(state->fd, state->watched_dirs[i]) < 0) {
+        printf("ERROR: trying to stop watching Error:%s\n", strerror(errno));
+      } else {
+        printf("DEBUG: Removed watch\n");
+      }
     }
     free(state->watched_fpaths[i]);
     state->watched_fpaths[i] = NULL;
   }
   free(state->watched_dirs);
+  free(state->in_use);
   free(state->watched_fpaths);
   if (close(state->fd) < 0) {
     printf("Error closing inotify Error:%s\n", strerror(errno));
   }
   free(state);
   state = NULL;
-  printf("exit cleanup_inotify\n");
   exit(EX_OK);
 }
-

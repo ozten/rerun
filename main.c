@@ -60,9 +60,9 @@ static void version(char *program);
 void handler(int sig)
 {
   if (sig == SIGINT) {
-    printf("Got %d SIGINT quiting\n", sig);
+    fprintf(stdout, "Got %d SIGINT quiting\n", sig);
   } else {
-    printf("Got %d ? quiting\n", sig);
+    fprintf(stdout, "Got %d ? quiting\n", sig);
   }
   cleanup();
   exit(EX_OK);
@@ -70,41 +70,46 @@ void handler(int sig)
 
 int main(int argc, char *argv[])
 {
-  int i;
+  int i = 1, in_options = 1;
   char *program = argv[0];
   char *directory, *fileglob, *command;
   struct inotify_state *state;
   struct sigaction sa;
-
+  struct rerun_config config = {0};
+  
   directory = "unknown";
   command = "";
   fileglob = "*";
 
-  if (2 == argc && 
-      0 == (strcmp("--help", argv[1]))) {
-    usage(program);
-    return EX_USAGE;
-  } else if (2 == argc && 
-             (0 == (strcmp("--version", argv[1])) ||
-              0 == (strcmp("-v", argv[1])))) {
-    version(program);
-    return EX_OK; 
-  } else if (argc <= 2) {
-    usage(program);
-    return EX_USAGE;
-  }
-  for (i = 1; i < argc; i++) {
-    printf("%s\n", argv[i]);
-    if (i == 1) {    
-      directory = argv[i];
-      printf("Watching %s\n", directory);
-    } else if (i == 2) {
-      fileglob = argv[i];
-    } else if (i == 3) {
-      command = argv[i];
+  while(1) {
+    if ('-' == argv[i][0]) {
+      if (0 == (strcmp("--once", argv[i]))) {
+        config.once = 1;
+      } else if (0 == (strcmp("--help", argv[i]))) {
+        usage(program);
+        return EX_USAGE;
+      } else if (0 == (strcmp("--version", argv[i])) ||
+                 0 == (strcmp("-v", argv[i]))) {
+        version(program);
+        return EX_USAGE;
+      }
+      i++;
+    } else {
+      break;
     }
   }
-  state = init_inotify(directory);
+  fprintf(stdout, "%d arguments left\n", (argc - i));
+  if (2 >= (argc - i)) { 
+    usage(program);
+    return EX_USAGE;
+  }
+  directory = argv[i++];
+  fprintf(stdout, "Watching %s\n", directory);
+  fileglob = argv[i++];
+  fprintf(stdout, "for %s\n", fileglob);
+  command = argv[i++];
+  fprintf(stdout, "to eventually run %s\n", command);
+  state = init_inotify(directory, config);
 
   sa.sa_handler = handler;
   sigemptyset(&sa.sa_mask);
@@ -126,8 +131,8 @@ int main(int argc, char *argv[])
 void usage(char program[])
 {
 /*2345678901234567890123456789012345678901234567890123456789012345678901234567*/
-  printf(
-"Usage %s DIRECTORY FILE_PATTERN COMMAND...\n"
+  fprintf(stdout, 
+"Usage %s [OPTIONS] DIRECTORY FILE_PATTERN COMMAND...\n"
 "\n"
 "Watches DIRECTORY recursively for changes in any file that matches FILE_PATTERN\n"
 "and then runs COMMAND. FILE_PATTERN should be in the glob format.\n"
@@ -135,6 +140,9 @@ void usage(char program[])
 "You probably want to wrap both the FILE_PATTERN and COMMAND in quotes,\n"
 "so the shell doesn't pre-expand patterns and the command is seen as a \n"
 "single argument.\n"
+"\n"
+"Options:\n"
+"\t--once\tRun until a change is detected, then exit\n"
 "\n"
 "Examples:\n"
 "\t%s web/js \"*.js\" \"juicer merge -min '' web/js/behavior.js\n"
@@ -152,7 +160,7 @@ void usage(char program[])
 
 void version(char *program)
 {
-  printf(
+  fprintf(stdout, 
 "%s 0.2\n"
 "\n"
 "Mozilla Tri-License: MPL 1.1/GPL 2.0/LGPL 2.1\n"

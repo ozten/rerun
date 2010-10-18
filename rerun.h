@@ -1,3 +1,7 @@
+struct rerun_config {
+  int once;
+};
+
 /**
  * watched_len is the index of the most recent 
  * watched directory (watched_dirs and watched_fpaths)
@@ -10,8 +14,9 @@ struct inotify_state {
   int *watched_dirs;
   char **watched_fpaths;
   int *in_use;
+  struct rerun_config config;
 };
 
-void * init_inotify(char *directory); 
+void * init_inotify(char *directory, struct rerun_config); 
 void rerun(struct inotify_state *state, char *fileglob, char *command);
 void cleanup(void);

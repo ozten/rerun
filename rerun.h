@@ -1,6 +1,7 @@
-struct rerun_config {
-  int once;
-};
+#ifndef FILE_RERUN_SEEN
+#define FILE_RERUN_SEEN
+
+#include "rerun_config.h"
 
 /**
  * watched_len is the index of the most recent 
@@ -14,9 +15,11 @@ struct inotify_state {
   int *watched_dirs;
   char **watched_fpaths;
   int *in_use;
-  struct rerun_config config;
+  struct rerun_config *config;
 };
 
-void * init_inotify(char *directory, struct rerun_config); 
+void * init_inotify(char *directory, struct rerun_config *config); 
 void rerun(struct inotify_state *state, char *fileglob, char *command);
 void cleanup(void);
+
+#endif /* !FILE_RERUN_SEEN */

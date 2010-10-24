@@ -53,6 +53,7 @@
 #include <bits/sigaction.h> /* WTF? sigaction TODO gcc -std=gnu99 instead of ansi? */
 
 #include "rerun.h"
+#include "rerun_config.h"
 
 static void usage(char[]); 
 static void version(char *program);
@@ -68,23 +69,25 @@ void handler(int sig)
   exit(EX_OK);
 }
 
+
+
 int main(int argc, char *argv[])
 {
   int i = 1, in_options = 1;
-  char *program = argv[0];
+  char *program = argv[0];/* TODO don't we need to do strcpy here */
   char *directory, *fileglob, *command;
   struct inotify_state *state;
   struct sigaction sa;
-  struct rerun_config config = {0};
+  struct rerun_config *config = (struct rerun_config *) init_config();
   
   directory = "unknown";
   command = "";
   fileglob = "*";
 
-  while(1) {
+  while(i < argc) {
     if ('-' == argv[i][0]) {
       if (0 == (strcmp("--once", argv[i]))) {
-        config.once = 1;
+        config->once = 1;
       } else if (0 == (strcmp("--help", argv[i]))) {
         usage(program);
         return EX_USAGE;
@@ -92,6 +95,10 @@ int main(int argc, char *argv[])
                  0 == (strcmp("-v", argv[i]))) {
         version(program);
         return EX_USAGE;
+      } else if (0 == (strcmp("--exclude-file", argv[i])) &&
+                 (i + 1) < argc) {
+        add_exclude_file(config, argv[i + 1]);
+        ++i;
       }
       i++;
     } else {
@@ -130,7 +137,6 @@ int main(int argc, char *argv[])
 
 void usage(char program[])
 {
-/*2345678901234567890123456789012345678901234567890123456789012345678901234567*/
   fprintf(stdout, 
 "Usage %s [OPTIONS] DIRECTORY FILE_PATTERN COMMAND...\n"
 "\n"
@@ -142,12 +148,14 @@ void usage(char program[])
 "single argument.\n"
 "\n"
 "Options:\n"
-"\t--once\tRun until a change is detected, then exit\n"
+"\t--exclude-file\tDon't run command if this file pattern is matched. May be\n"
+"\t\t\tused several times.\n"
+"\t--once\tRun until a change is detected, run command, then exit\n"
 "\n"
 "Examples:\n"
 "\t%s web/js \"*.js\" \"juicer merge -min '' web/js/behavior.js\n"
 "\n"
-"\t%s web \"*.css\" \"bin/package_site.sh\n"
+"\t%s --exclude-file screen.min.css ./css *.css ./compress_assets.sh\n"
 "\n"
 "rerun will ignore dotfiles such as .#foo.js. It will watch new sub-\n"
 "directories which are added later.\n"

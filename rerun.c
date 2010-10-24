@@ -50,6 +50,7 @@
 #include <ftw.h>
 
 #include "rerun.h"
+#include "rerun_config.h"
 
 #define EVENT_SIZE  ( sizeof (struct inotify_event) )
 #define BUF_LEN     ( 1024 * ( EVENT_SIZE + 16 ) )
@@ -58,9 +59,14 @@ struct inotify_state *rerun_state; /* only used by ftw, cleanup */
 void grow_watched_dirs(struct inotify_state *state);
 static void cleanup_inotify(struct inotify_state *state);
 static void watch_directory(struct inotify_state *state, char *directory);
+
+int ignore_file(struct inotify_state *state, char *filename);
+
 void handle_modified_file(struct inotify_state *state, struct inotify_event *event, char *command);
 void handle_create_directory(struct inotify_state *state, struct inotify_event *event);
 void handle_delete_directory(struct inotify_state *state, struct inotify_event *event);
+
+
 
 static int visit_directory(const char *fpath, const struct stat *sb,
                            int tflag, struct FTW *ftwbuf)
@@ -163,7 +169,7 @@ void grow_watched_dirs(struct inotify_state *state)
 }
 
 
-void * init_inotify(char *directory, struct rerun_config config)
+void * init_inotify(char *directory, struct rerun_config *config)
 {
   struct inotify_state *state;
 
@@ -255,9 +261,9 @@ void rerun(struct inotify_state *state, char *fileglob, char *command)
             (strlen(event->name) > 0 && /* We should ignore .#foo.c */
              event->name[0] != '.') &&  /* and other hidden files  */
             0 == fnmatch(fileglob, event->name, 0)) {
-
-          handle_modified_file(state, event, command);
-
+          if (! ignore_file(state, event->name)) {
+            handle_modified_file(state, event, command);
+          }
         } 
         if ((IN_DELETE_SELF & event->mask) &&
             (IN_ISDIR  & event->mask)) {
@@ -281,6 +287,17 @@ void rerun(struct inotify_state *state, char *fileglob, char *command)
   }
 }
 
+int ignore_file(struct inotify_state *state, char *filename)
+{
+  int i, should_exclude = 0;
+  for (i = 0; i < state->config->exclude_i; i++) {
+    if (0 == fnmatch(state->config->exclude_files[0], filename, 0)) {
+      should_exclude = 1;
+    }
+  }
+  return should_exclude;
+}
+
 /**
  * Called when an *interesting* file has been modified
  */
@@ -295,7 +312,7 @@ void handle_modified_file(struct inotify_state *state, struct inotify_event *eve
   if (WIFSIGNALED(ret) &&
       (WTERMSIG(ret) == SIGINT || WTERMSIG(ret) == SIGQUIT)) {
     cleanup_inotify(state);
-  } else if (state->config.once) {
+  } else if (state->config->once) {
     cleanup_inotify(state); 
   }
 }
@@ -360,6 +377,7 @@ void cleanup_inotify(struct inotify_state *state)
   if (close(state->fd) < 0) {
     fprintf(stderr, "Error closing inotify Error:%s\n", strerror(errno));
   }
+  free_config(state->config);
   free(state);
   state = NULL;
   exit(EX_OK);

@@ -5,15 +5,20 @@ PROGRAM=rerun
 
 all: rerun
 
-rerun: rerun.o main.o
-	${CC} ${CFLAGS} -o ${PROGRAM} rerun.o main.o
+rerun: rerun.o rerun_config.o main.o
+#	${CC} ${CFLAGS} -o ${PROGRAM} rerun.o rerun_config.o main.o
 
-main.o: main.c rerun.h
+main.o: rerun_config.o main.c rerun.h
+	${CC} ${CFLAGS} -c -o main.o rerun_config.o main.c
 
 rerun.o: rerun.c rerun.h
 
+rerun_config.o: rerun_config.c
+	${CC} ${CFLAGS} -c -o rerun_config.o rerun_config.c
+
+
 debug:
-	${CC} ${DFLAGS} -o ${PROGRAM} rerun.c main.c
+	${CC} ${CFLAGS} -o ${PROGRAM} rerun.c main.c
 
 clean:
 	rm -f ${PROGRAM} *~ *.o
@@ -28,3 +33,10 @@ valgrind: rerun
 
 gdb: rerun
 	gdb --args ./rerun . '*.c' 'echo "C file edited"'
+
+tests: test_config
+	echo "building tests"
+
+test_config: rerun_config.o
+	${CC} ${CFLAGS} -o tests/test_config rerun_config.o tests/test_config.c 
+

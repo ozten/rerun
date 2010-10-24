@@ -67,24 +67,30 @@ def rerun_once():
 
 def valgrind_format_okay(actual_lines):
     return (re.match('\s*==\d*==\s*ERROR SUMMARY: .*', actual_lines[-2]) and
-            re.match('\s*==\d*==\s*For counts of detected and suppressed errors, rerun with.*', actual_lines[-3]) and
-            re.match('\s*==\d*==\s*HEAP SUMMARY:\s*', actual_lines[-9]))
+            (re.match('\s*==\d*==\s*For counts of detected and suppressed errors, rerun with.*', actual_lines[-3]) or
+             re.match('\s*==\d*==\s*For counts of detected and suppressed errors, rerun with.*', actual_lines[-4])) and
+            (re.match('\s*==\d*==\s*HEAP SUMMARY:\s*', actual_lines[-9]) or 
+             re.match('\s*==\d*==\s*HEAP SUMMARY:\s*', actual_lines[-10])))
 
 actual = rerun_once()
 actual_lines = actual.split('\n')
 
 if valgrind_format_okay(actual_lines):
-    if not re.match('\s*==\d*==\s*All heap blocks were freed -- no leaks are possible', actual_lines[-5]):
+    if not (re.match('\s*==\d*==\s*All heap blocks were freed -- no leaks are possible', actual_lines[-5]) or
+            re.match('\s*==\d*==\s*All heap blocks were freed -- no leaks are possible', actual_lines[-6])):
         error = True
         print("ERROR: We have a memory leak")
         print(actual_lines[-5])
 else:
     error = True
-    print(actual)
+    #print(actual)
     print("ERROR: valgrind summary had unexpected format. ^^^")
 
 if not error:
     print("OK")
+
+# TODO ./rerun SegFaults... write a test, it should print usage instead
+
 # TODO figure out Popen and child exit code, add test
 #if proc.returncode:
 #    print("problem with Return code is %d" % proc.returncode)

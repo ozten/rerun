@@ -169,7 +169,7 @@ void usage(char program[])
 void version(char *program)
 {
   fprintf(stdout, 
-"%s 0.2\n"
+"%s 0.3\n"
 "\n"
 "Mozilla Tri-License: MPL 1.1/GPL 2.0/LGPL 2.1\n"
 "\n"

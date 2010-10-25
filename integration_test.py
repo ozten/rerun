@@ -12,6 +12,8 @@ debug = False
 error = False
 
 def rerun_once():
+    num_tests = 2
+    print("1..%d" % num_tests)
     # TODO: valgrind captures all signals, so we can't SIGINT it...
     # so we use the --once flag to get rerun to exit
 
@@ -66,28 +68,43 @@ def rerun_once():
     return output
 
 def valgrind_format_okay(actual_lines):
-    return (re.match('\s*==\d*==\s*ERROR SUMMARY: .*', actual_lines[-2]) and
-            (re.match('\s*==\d*==\s*For counts of detected and suppressed errors, rerun with.*', actual_lines[-3]) or
-             re.match('\s*==\d*==\s*For counts of detected and suppressed errors, rerun with.*', actual_lines[-4])) and
-            (re.match('\s*==\d*==\s*HEAP SUMMARY:\s*', actual_lines[-9]) or 
-             re.match('\s*==\d*==\s*HEAP SUMMARY:\s*', actual_lines[-10])))
+    blocks_free_line = None
+    saw_summary = saw_error_counts = saw_heap_summary = False
+    for line in actual_lines[-12:]:
+        if not saw_summary and \
+               re.match('\s*==\d*==\s*ERROR SUMMARY: .*', line):
+            saw_summary = True
+        elif not saw_error_counts and \
+                 re.match('\s*==\d*==\s*For counts of detected and suppressed errors, rerun with.*', line):
+            saw_error_counts = True
+        elif not saw_heap_summary and \
+                 re.match('\s*==\d*==\s*HEAP SUMMARY:\s*', line):
+            saw_heap_summary = True
+
+    return saw_summary and saw_error_counts and saw_heap_summary
 
 actual = rerun_once()
 actual_lines = actual.split('\n')
 
+test1 = "1 - valgrind summary is in expected format"
 if valgrind_format_okay(actual_lines):
-    if not (re.match('\s*==\d*==\s*All heap blocks were freed -- no leaks are possible', actual_lines[-5]) or
-            re.match('\s*==\d*==\s*All heap blocks were freed -- no leaks are possible', actual_lines[-6])):
-        error = True
-        print("ERROR: We have a memory leak")
-        print(actual_lines[-5])
+    print("ok %s" % test1)
+    summaries = actual_lines[-7:-4]
+    no_leaks = False
+    for line in summaries:
+        if re.match('\s*==\d*==\s*All heap blocks were freed -- no leaks are possible', line):
+            no_leaks = True
+            break
+    test2 = "2 - We should not leak memory"
+    if no_leaks:
+        print("ok %s" % test2)
+    else:
+        print("not ok %s" % test2)
+        print("\n".join(["\t%s" % s for s in summaries]))
 else:
+    print("not ok %s" % test1)
     error = True
-    #print(actual)
-    print("ERROR: valgrind summary had unexpected format. ^^^")
-
-if not error:
-    print("OK")
+    print("\n".join(["\t%s" % s for s in actual_lines[-20:]]))
 
 # TODO ./rerun SegFaults... write a test, it should print usage instead
 

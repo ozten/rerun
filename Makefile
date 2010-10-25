@@ -40,3 +40,5 @@ tests: test_config
 test_config: rerun_config.o
 	${CC} ${CFLAGS} -o tests/test_config rerun_config.o tests/test_config.c 
 
+check: integration_test.py
+	prove integration_test.py
